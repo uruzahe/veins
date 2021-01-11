@@ -198,7 +198,6 @@ def run_sumo(runpath, sumo_command, shlex, config_file_name, remote_port, seed, 
         else:
             cmd = [sumo_command, "-c", config_file_name]
         logging.info("Starting SUMO (%s) on port %d, seed %d" % (" ".join(cmd), remote_port, seed))
-        print("!!")
         sumo = subprocess.Popen(cmd, cwd=runpath, stdin=None, stdout=sumoLogOut, stderr=sumoLogErr)
 
         sumo_socket = None
@@ -209,7 +208,12 @@ def run_sumo(runpath, sumo_command, shlex, config_file_name, remote_port, seed, 
             try:
                 logging.debug("Connecting to SUMO (%s) on port %d (try %d)" % (" ".join(cmd), remote_port, tries))
                 sumo_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sumo_socket.connect(('127.0.0.1', remote_port))
+                # sumo_socket.connect(('127.0.0.1', remote_port))
+                sumo_socket.connect(('192.168.20.141', 10002))
+                handle_set_order(sumo_socket, 1)
+                # for i in range(0, 20):
+                #     print("time: {:}".format(i))
+                #     time.sleep(1)
                 break
             except socket.error, e:
                 logging.debug("Error (%s)" % e)
@@ -440,6 +444,53 @@ def handle_get_version(conn):
     response = struct.pack("!iBBBiBBii", 4+1+1+1+4 + 1+1+4+4+len(_LAUNCHD_VERSION), 1+1+1+4, _CMD_GET_VERSION, 0x00, 0x00, 1+1+4+4+len(_LAUNCHD_VERSION), _CMD_GET_VERSION, _API_VERSION, len(_LAUNCHD_VERSION)) + _LAUNCHD_VERSION
     conn.send(response)
 
+def handle_set_order(conn, order=2):
+    """
+    process a "set order" command received on the connection
+    """
+    # _sendCmd method in connection.py
+    cmdID = 0x03
+    varID = None
+    objID = None
+    format = "I"
+    values = order
+
+    ### _pack method in connection.py
+    def tmp_pack(format, *values):
+        packed = bytes()
+        for f, v in zip(format, values):
+           packed += struct.pack("!i", int(v))
+        return packed
+    packed = tmp_pack(format, values)
+
+    length = len(packed) + 1 + 1  # length and command
+    if varID is not None:
+        if isinstance(varID, tuple):  # begin and end of a subscription
+            length += 8 + 8 + 4 + len(objID)
+        else:
+            length += 1 + 4 + len(objID)
+
+    body_string = bytes()
+    if length <= 255:
+        body_string += struct.pack("!BB", length, cmdID)
+    else:
+        body_string += struct.pack("!BiB", 0, length + 4, cmdID)
+
+    if varID is not None:
+        if isinstance(varID, tuple):
+            body_string += struct.pack("!dd", *varID)
+        else:
+            body_string += struct.pack("!B", varID)
+        body_string += struct.pack("!i", len(objID)) + objID.encode("latin1")
+    body_string += packed
+
+    # _sendExact method in connection.py
+    def tmp_sendExact(conn, body_string):
+        length = struct.pack("!i", len(body_string) + 4)
+        conn.send(length + body_string)
+    tmp_sendExact(conn, body_string)
+
+    data = conn.recv(65535)
 
 def read_launch_config(conn):
     """
@@ -639,7 +690,7 @@ def main():
     # Option handling
     parser = OptionParser()
     # parser.add_option("-c", "--command", dest="command", default="sumo", help="run SUMO as COMMAND [default: %default]", metavar="COMMAND")
-    parser.add_option("-c", "--command", dest="command", default="sumo-gui", help="run SUMO as COMMAND [default: %default]", metavar="COMMAND")
+    parser.add_option("-c", "--command", dest="command", default="sumo", help="run SUMO as COMMAND [default: %default]", metavar="COMMAND")
     parser.add_option("-s", "--shlex", dest="shlex", default=False, action="store_true", help="treat command as shell string to execute, replace {} with command line parameters [default: no]")
     parser.add_option("-p", "--port", dest="port", type="int", default=9999, action="store", help="listen for connections on PORT [default: %default]", metavar="PORT")
     parser.add_option("-b", "--bind", dest="bind", default="127.0.0.1", help="bind to ADDRESS [default: %default]", metavar="ADDRESS")
@@ -673,3 +724,4 @@ def main():
 # Start main() when run interactively
 if __name__ == '__main__':
     main()
+#!/usr/bin/env python2
