@@ -54,6 +54,10 @@ simple DemoBaseApplLayer like IBaseApplLayer
         int wsaLengthBits = default(250bit) @unit(bit);
         double wsaInterval =  default(1s) @unit(s);
 
+        bool sendCPM = default(true);
+        double sensorTick = default(0.1s) @unit(s);
+        string carlaVeinsDataDir = default("/vagrant/carla-veins-data/");
+
     gates:
         input lowerLayerIn; // from mac layer
         output lowerLayerOut; // to mac layer

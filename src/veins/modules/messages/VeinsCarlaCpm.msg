@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2017 Christoph Sommer <sommer@ccs-labs.org>
+// Copyright (C) 2011 David Eckhoff <eckhoff@cs.fau.de>
 //
 // Documentation for these modules is at http://veins.car2x.org/
 //
@@ -20,13 +20,18 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
 
-import org.car2x.veins.nodes.RSU;
-import org.car2x.veins.nodes.Scenario;
+cplusplus {{
+#include "veins/base/utils/Coord.h"
+#include "veins/modules/messages/BaseFrame1609_4_m.h"
+#include "veins/base/utils/SimpleAddress.h"
+}}
 
-network RSUExampleScenario extends Scenario
-{
-    submodules:
-        // rsu[1]: RSU {
-        //     @display("p=150,140;i=veins/sign/yellowdiamond;is=vs");
-        // }
+namespace veins;
+
+class BaseFrame1609_4;
+class noncobject Coord;
+class LAddress::L2Type extends void;
+
+packet VeinsCarlaCpm extends BaseFrame1609_4 {
+    string payload;
 }

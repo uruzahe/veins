@@ -29,10 +29,25 @@
 #include "veins/modules/messages/BaseFrame1609_4_m.h"
 #include "veins/modules/messages/DemoServiceAdvertisement_m.h"
 #include "veins/modules/messages/DemoSafetyMessage_m.h"
+#include "veins/modules/messages/VeinsCarlaCpm_m.h"
 #include "veins/base/connectionManager/ChannelAccess.h"
 #include "veins/modules/mac/ieee80211p/DemoBaseApplLayerToMac1609_4Interface.h"
 #include "veins/modules/mobility/traci/TraCIMobility.h"
 #include "veins/modules/mobility/traci/TraCICommandInterface.h"
+
+// My Code, Begin.
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
+
+void lock(const char *oldpath, const char *newpath);
+void set_cpm_payloads_for_carla(std::string sumo_id, std::string payload);
+std::vector<std::string>  get_cpm_payloads_from_carla(std::string sumo_id);
+// My Code, End.
 
 namespace veins {
 
@@ -66,7 +81,8 @@ public:
 
     enum DemoApplMessageKinds {
         SEND_BEACON_EVT,
-        SEND_WSA_EVT
+        SEND_WSA_EVT,
+        SEND_CPM_EVT
     };
 
 protected:
@@ -84,6 +100,9 @@ protected:
 
     /** @brief this function is called upon receiving a DemoSafetyMessage, also referred to as a beacon  */
     virtual void onBSM(DemoSafetyMessage* bsm){};
+
+    /** @brief this function is called upon receiving a VeinsCarlaCpm, also referred to as a cooprative perception message  */
+    // virtual void onCPM(VeinsCarlaCpm* bsm){};
 
     /** @brief this function is called upon receiving a DemoServiceAdvertisement */
     virtual void onWSA(DemoServiceAdvertisment* wsa){};
@@ -180,6 +199,18 @@ protected:
     /* messages for periodic events such as beacon and WSA transmissions */
     cMessage* sendBeaconEvt;
     cMessage* sendWSAEvt;
+
+
+    // My Code, Begin.
+    std::string carlaVeinsDataDir;
+    bool sendCPM;
+    cMessage* sendCPMEvt;
+    double sensorTick;
+    std::string sumo_id;
+
+    uint32_t generatedCPMs;
+    uint32_t receivedCPMs;
+    // My Code, End.
 };
 
 } // namespace veins
