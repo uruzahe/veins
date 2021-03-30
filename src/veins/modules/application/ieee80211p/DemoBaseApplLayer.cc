@@ -43,14 +43,16 @@ void lock(const char *oldpath, const char *newpath) {
 }
 
 
-void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, std::string payload) {
+void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, std::vector<std::string> payloads) {
     std::string packet_data_file_name = sumo_id + "_packet.json";
     std::string packet_lock_file_name = sumo_id + "_packet.json.lock";
 
     lock((data_sync_dir + packet_data_file_name).c_str(), (data_sync_dir + packet_lock_file_name).c_str());
     std::ofstream ofs(data_sync_dir + packet_data_file_name, std::ios::in | std::ios::ate);
     if (ofs.is_open()) {
-        ofs << payload << std::endl;
+        for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
+            ofs << *payload << std::endl;
+        }
     }
     // std::cout << "packet file is open: " << ofs.is_open() << std::endl;
     // ofs.flush();
@@ -79,7 +81,6 @@ std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::s
     std::ofstream ofs(data_sync_dir + sensor_data_file_name);
     ofs.close();
     unlink((data_sync_dir + sensor_lock_file_name).c_str());
-
     return payloads;
 }
 
@@ -147,6 +148,7 @@ void DemoBaseApplLayer::initialize(int stage)
 
         sendCPMEvt = new cMessage("cpm evt", SEND_CPM_EVT);
         sumo_id = mobility->getExternalId();
+        obtainedCPMs = {};
 
         generatedCPMs = 0;
         receivedCPMs = 0;
@@ -300,7 +302,7 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
         // std::cout << sumo_id << " received cpm messages" << std::endl;
         // std::cout << "payloads: " << cpm->getPayload() << std::endl;
         receivedCPMs++;
-        set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, (std::string) cpm->getPayload());
+        obtainedCPMs.push_back((std::string) cpm->getPayload());
     }
     else {
         receivedWSMs++;
@@ -328,6 +330,14 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
         break;
     }
     case SEND_CPM_EVT: {
+        // My Code, Begin
+
+        // save received cpms
+        set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
+        obtainedCPMs.clear();
+        obtainedCPMs.shrink_to_fit();
+
+        // send CPMs
         std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
 
         for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
@@ -347,6 +357,7 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
         }
         scheduleAt(simTime() + sensorTick, sendCPMEvt);
         break;
+        // My Code, Begin
     }
     default: {
         if (msg) EV_WARN << "APP: Error: Got Self Message of unknown kind! Name: " << msg->getName() << endl;
@@ -423,12 +434,12 @@ void DemoBaseApplLayer::checkAndTrackPacket(cMessage* msg)
         EV_TRACE << "sending down a WSA" << std::endl;
         generatedWSAs++;
     }
-    else if (dynamic_cast<BaseFrame1609_4*>(msg)) {
-        EV_TRACE << "sending down a wsm" << std::endl;
-        generatedWSMs++;
-    }
     else if (dynamic_cast<VeinsCarlaCpm*>(msg)) {
         EV_TRACE << "sending down a cpm" << std::endl;
         generatedCPMs++;
+    }
+    else if (dynamic_cast<BaseFrame1609_4*>(msg)) {
+        EV_TRACE << "sending down a wsm" << std::endl;
+        generatedWSMs++;
     }
 }

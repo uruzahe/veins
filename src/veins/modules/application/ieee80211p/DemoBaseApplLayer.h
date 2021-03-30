@@ -45,7 +45,7 @@
 #include <vector>
 
 void lock(const char *oldpath, const char *newpath);
-void set_cpm_payloads_for_carla(std::string sumo_id, std::string payload);
+void set_cpm_payloads_for_carla(std::string sumo_id, std::vector<std::string> payloads);
 std::vector<std::string>  get_cpm_payloads_from_carla(std::string sumo_id);
 // My Code, End.
 
@@ -207,6 +207,7 @@ protected:
     cMessage* sendCPMEvt;
     double sensorTick;
     std::string sumo_id;
+    std::vector<std::string> obtainedCPMs;
 
     uint32_t generatedCPMs;
     uint32_t receivedCPMs;
