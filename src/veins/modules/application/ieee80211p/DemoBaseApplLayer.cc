@@ -25,6 +25,7 @@
 using namespace veins;
 
 // My code, Begin
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -332,6 +333,7 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
     case SEND_CPM_EVT: {
         // My Code, Begin
 
+        time_t start_time = time(NULL);
         // save received cpms
         set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
         obtainedCPMs.clear();
@@ -356,6 +358,13 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
 
         }
         scheduleAt(simTime() + sensorTick, sendCPMEvt);
+
+        time_t end_time = time(NULL);
+        std::cout <<
+            "start: " << start_time <<
+            "end: " << end_time <<  
+            "diff_time: " << difftime(time(NULL), start_time) <<
+        std::endl;
         break;
         // My Code, Begin
     }
