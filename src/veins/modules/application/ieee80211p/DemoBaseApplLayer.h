@@ -153,6 +153,11 @@ protected:
      */
     virtual void checkAndTrackPacket(cMessage* msg);
 
+    // My Code, Begin
+    virtual void syncCarlaVeinsData(cMessage* msg);
+
+    virtual void pthreadSyncCarlaVeinsData(cMessage* msg);
+    // My Code, End
 protected:
     /* pointers ill be set when used with TraCIMobility */
     TraCIMobility* mobility;
@@ -208,6 +213,8 @@ protected:
     double sensorTick;
     std::string sumo_id;
     std::vector<std::string> obtainedCPMs;
+    std::string veinsLockFile;
+    std::string veinsTxtFile;
 
     uint32_t generatedCPMs;
     uint32_t receivedCPMs;

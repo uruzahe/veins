@@ -1,1 +1,2 @@
 CFLAGS_RELEASE='-O3'
+#MPI_LIBS='-pthread'

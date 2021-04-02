@@ -25,7 +25,10 @@
 using namespace veins;
 
 // My code, Begin
+// #include <boost/thread.hpp>
+#include <pthread.h>
 #include <time.h>
+#include <chrono>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +58,7 @@ void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, 
             ofs << *payload << std::endl;
         }
     }
-    // std::cout << "packet file is open: " << ofs.is_open() << std::endl;
+    // std::cout << "sumo_id: " << sumo_id <<", packet file is open: " << ofs.is_open() << std::endl;
     // ofs.flush();
     ofs.close();
     unlink((data_sync_dir + packet_lock_file_name).c_str());
@@ -80,6 +83,7 @@ std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::s
     ifs.close();
 
     std::ofstream ofs(data_sync_dir + sensor_data_file_name);
+    // std::cout << "sumo_id: " << sumo_id <<", socket file is open: " << ofs.is_open() << std::endl;
     ofs.close();
     unlink((data_sync_dir + sensor_lock_file_name).c_str());
     return payloads;
@@ -150,6 +154,8 @@ void DemoBaseApplLayer::initialize(int stage)
         sendCPMEvt = new cMessage("cpm evt", SEND_CPM_EVT);
         sumo_id = mobility->getExternalId();
         obtainedCPMs = {};
+        veinsLockFile = sumo_id + "_veins.lock";
+        veinsTxtFile = sumo_id + "_veins.txt";
 
         generatedCPMs = 0;
         receivedCPMs = 0;
@@ -313,6 +319,41 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
     delete (msg);
 }
 
+// My Code, Begin
+void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
+{
+    // save received cpms
+    set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
+    obtainedCPMs.clear();
+    obtainedCPMs.shrink_to_fit();
+
+    // send CPMs
+    std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+
+    for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
+        VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
+        try {
+            json payload_json = json::parse(*payload);
+
+            populateWSM(cpm);
+            cpm->setPayload((*payload).c_str());
+            cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
+            sendDown(cpm);
+        } catch (...) {
+            // std::cout << "Invalid payload: " << *payload << std::endl;
+            continue;
+        }
+    }
+}
+
+void DemoBaseApplLayer::pthreadSyncCarlaVeinsData(cMessage* msg)
+{
+    // lock((carlaVeinsDataDir + veinsTxtFile).c_str(), (carlaVeinsDataDir + veinsLockFile).c_str());
+    syncCarlaVeinsData(msg);
+    // unlink((carlaVeinsDataDir + veinsLockFile).c_str());
+}
+
+// My Code, End.
 void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
 {
     switch (msg->getKind()) {
@@ -332,39 +373,16 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
     }
     case SEND_CPM_EVT: {
         // My Code, Begin
+        std::chrono::system_clock::time_point  start, end; // 型は auto で可
+        start = std::chrono::system_clock::now(); // 計測開始時間
 
-        time_t start_time = time(NULL);
-        // save received cpms
-        set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
-        obtainedCPMs.clear();
-        obtainedCPMs.shrink_to_fit();
+        syncCarlaVeinsData(msg);
 
-        // send CPMs
-        std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+        end = std::chrono::system_clock::now();  // 計測終了時間
+        double elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+        // std::cout << "diff_time: " << elapsed * (1.0 / (1000 * 1000 * 1000)) << std::endl;
 
-        for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
-            VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
-            try {
-                json payload_json = json::parse(*payload);
-
-                populateWSM(cpm);
-                cpm->setPayload((*payload).c_str());
-                cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
-                sendDown(cpm);
-            } catch (...) {
-                // std::cout << "Invalid payload: " << *payload << std::endl;
-                continue;
-            }
-
-        }
         scheduleAt(simTime() + sensorTick, sendCPMEvt);
-
-        time_t end_time = time(NULL);
-        std::cout <<
-            "start: " << start_time <<
-            "end: " << end_time <<  
-            "diff_time: " << difftime(time(NULL), start_time) <<
-        std::endl;
         break;
         // My Code, Begin
     }
