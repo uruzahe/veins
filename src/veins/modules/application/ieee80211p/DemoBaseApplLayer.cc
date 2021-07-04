@@ -332,7 +332,8 @@ void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
 
       // send CPMs
       std::vector<std::string> new_payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
-      reservedCPMs.insert(reservedCPMs.end(), new_payloads.begin(), new_payloads.end());
+
+      // reservedCPMs.insert(reservedCPMs.end(), new_payloads.begin(), new_payloads.end());
       // std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
     }
 
