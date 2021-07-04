@@ -55,8 +55,9 @@ simple DemoBaseApplLayer like IBaseApplLayer
         double wsaInterval =  default(1s) @unit(s);
 
         bool sendCPM = default(true);
-        double sensorTick = default(0.1s) @unit(s);
+        double carlaTimeStep = default(0.1s) @unit(s);
         string carlaVeinsDataDir = default("/vagrant/carla-veins-data/");
+        bool is_dynamic_simulation = default(true);
 
     gates:
         input lowerLayerIn; // from mac layer

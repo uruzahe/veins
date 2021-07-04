@@ -149,11 +149,13 @@ void DemoBaseApplLayer::initialize(int stage)
         EV_TRACE << "My Code" << std::endl;
         carlaVeinsDataDir = par("carlaVeinsDataDir").stringValue();
         sendCPM = par("sendCPM").boolValue();
-        sensorTick = par("sensorTick").doubleValue();
+        is_dynamic_simulation = par("is_dynamic_simulation").boolValue();
+        carlaTimeStep = par("carlaTimeStep").doubleValue();
 
         sendCPMEvt = new cMessage("cpm evt", SEND_CPM_EVT);
         sumo_id = mobility->getExternalId();
         obtainedCPMs = {};
+        reservedCPMs = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
         veinsLockFile = sumo_id + "_veins.lock";
         veinsTxtFile = sumo_id + "_veins.txt";
 
@@ -322,15 +324,53 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
 // My Code, Begin
 void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
 {
-    // save received cpms
-    set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
-    obtainedCPMs.clear();
-    obtainedCPMs.shrink_to_fit();
+    if (is_dynamic_simulation) {
+      // save received cpms
+      set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
+      obtainedCPMs.clear();
+      obtainedCPMs.shrink_to_fit();
 
-    // send CPMs
-    std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+      // send CPMs
+      std::vector<std::string> new_payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+      reservedCPMs.insert(reservedCPMs.end(), new_payloads.begin(), new_payloads.end());
+      // std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+    }
 
-    for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
+    // auto payload = reservedCPMs.begin();
+    // while (payload != reservedCPMs.end()) {
+    //   json payload_json = json::parse(*payload);
+    //   double timestamp = payload_json["timestamp"].get<double>();
+    //   double simtime = simTime().dbl();
+    //   std::cout << "payload: " << *payload << std::endl;
+    //
+    //   try {
+    //     if (timestamp <= simtime - carlaTimeStep) {
+    //       // The packet is too old, so erase it.
+    //       reservedCPMs.erase(payload);
+    //
+    //     } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
+    //       // The packet is created now, so send it.
+    //       VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
+    //       populateWSM(cpm);
+    //       cpm->setPayload((*payload).c_str());
+    //       cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
+    //       sendDown(cpm);
+    //
+    //       reservedCPMs.erase(payload);
+    //
+    //     } else {
+    //       // The packet should be sent in the next timestemp, so break
+    //       break;
+    //
+    //     }
+    //
+    //   } catch (...) {
+    //       std::cout << "Invalid payload: " << *payload << std::endl;
+    //       payload++;
+    //   }
+    // }
+
+    for (auto payload = reservedCPMs.begin(); payload != reservedCPMs.end(); payload++) {
         VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
         try {
             json payload_json = json::parse(*payload);
@@ -373,16 +413,16 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
     }
     case SEND_CPM_EVT: {
         // My Code, Begin
-        std::chrono::system_clock::time_point  start, end; // 型は auto で可
-        start = std::chrono::system_clock::now(); // 計測開始時間
+        // std::chrono::system_clock::time_point  start, end; // 型は auto で可
+        // start = std::chrono::system_clock::now(); // 計測開始時間
 
         syncCarlaVeinsData(msg);
 
-        end = std::chrono::system_clock::now();  // 計測終了時間
-        double elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+        // end = std::chrono::system_clock::now();  // 計測終了時間
+        // double elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
         // std::cout << "diff_time: " << elapsed * (1.0 / (1000 * 1000 * 1000)) << std::endl;
 
-        scheduleAt(simTime() + sensorTick, sendCPMEvt);
+        scheduleAt(simTime() + carlaTimeStep, sendCPMEvt);
         break;
         // My Code, Begin
     }

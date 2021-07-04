@@ -208,11 +208,13 @@ protected:
 
     // My Code, Begin.
     std::string carlaVeinsDataDir;
+    bool is_dynamic_simulation;
     bool sendCPM;
     cMessage* sendCPMEvt;
-    double sensorTick;
+    double carlaTimeStep;
     std::string sumo_id;
     std::vector<std::string> obtainedCPMs;
+    std::vector<std::string> reservedCPMs;
     std::string veinsLockFile;
     std::string veinsTxtFile;
 
