@@ -58,14 +58,12 @@ void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, 
             ofs << *payload << std::endl;
         }
     }
-    // std::cout << "sumo_id: " << sumo_id <<", packet file is open: " << ofs.is_open() << std::endl;
-    // ofs.flush();
     ofs.close();
     unlink((data_sync_dir + packet_lock_file_name).c_str());
 }
 
 
-std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::string data_sync_dir) {
+std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::string data_sync_dir, bool read_only) {
     std::string sensor_data_file_name = sumo_id + "_sensor.json";
     std::string sensor_lock_file_name = sumo_id + "_sensor.json.lock";
 
@@ -77,14 +75,20 @@ std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::s
     if (ifs.is_open()) {
         while (!ifs.eof()) {
           std::getline(ifs, payload);
-          payloads.push_back(payload);
+          if (payload != "") {
+            payloads.push_back(payload);
+          } else {
+            continue;
+          }
         }
     }
     ifs.close();
 
-    std::ofstream ofs(data_sync_dir + sensor_data_file_name);
-    // std::cout << "sumo_id: " << sumo_id <<", socket file is open: " << ofs.is_open() << std::endl;
-    ofs.close();
+    if (!read_only) {
+      std::ofstream ofs(data_sync_dir + sensor_data_file_name);
+      ofs.close();
+    }
+
     unlink((data_sync_dir + sensor_lock_file_name).c_str());
     return payloads;
 }
@@ -155,7 +159,11 @@ void DemoBaseApplLayer::initialize(int stage)
         sendCPMEvt = new cMessage("cpm evt", SEND_CPM_EVT);
         sumo_id = mobility->getExternalId();
         obtainedCPMs = {};
-        reservedCPMs = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+        if (is_dynamic_simulation) {
+          reservedCPMs = {} ;
+        } else {
+          reservedCPMs = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir, true);
+        }
         veinsLockFile = sumo_id + "_veins.lock";
         veinsTxtFile = sumo_id + "_veins.txt";
 
@@ -295,7 +303,6 @@ void DemoBaseApplLayer::handleParkingUpdate(cObject* obj)
 
 void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
 {
-    // std::cout << sumo_id << " received messages" << std::endl;
     BaseFrame1609_4* wsm = dynamic_cast<BaseFrame1609_4*>(msg);
     ASSERT(wsm);
 
@@ -308,8 +315,8 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
         onWSA(wsa);
     }
     else if (VeinsCarlaCpm* cpm = dynamic_cast<VeinsCarlaCpm*>(wsm)) {
-        // std::cout << sumo_id << " received cpm messages" << std::endl;
-        // std::cout << "payloads: " << cpm->getPayload() << std::endl;
+        std::cout << sumo_id << " received cpm messages" << std::endl;
+        std::cout << "payloads: " << cpm->getPayload() << std::endl;
         receivedCPMs++;
         obtainedCPMs.push_back((std::string) cpm->getPayload());
     }
@@ -331,59 +338,38 @@ void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
       obtainedCPMs.shrink_to_fit();
 
       // send CPMs
-      std::vector<std::string> new_payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
-
-      // reservedCPMs.insert(reservedCPMs.end(), new_payloads.begin(), new_payloads.end());
-      // std::vector<std::string> payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir);
+      std::vector<std::string> new_payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir, false);
+      for (auto payload = new_payloads.begin(); payload != new_payloads.end(); payload++) {
+        reservedCPMs.push_back(*payload);
+      }
     }
 
-    // auto payload = reservedCPMs.begin();
-    // while (payload != reservedCPMs.end()) {
-    //   json payload_json = json::parse(*payload);
-    //   double timestamp = payload_json["timestamp"].get<double>();
-    //   double simtime = simTime().dbl();
-    //   std::cout << "payload: " << *payload << std::endl;
-    //
-    //   try {
-    //     if (timestamp <= simtime - carlaTimeStep) {
-    //       // The packet is too old, so erase it.
-    //       reservedCPMs.erase(payload);
-    //
-    //     } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
-    //       // The packet is created now, so send it.
-    //       VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
-    //       populateWSM(cpm);
-    //       cpm->setPayload((*payload).c_str());
-    //       cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
-    //       sendDown(cpm);
-    //
-    //       reservedCPMs.erase(payload);
-    //
-    //     } else {
-    //       // The packet should be sent in the next timestemp, so break
-    //       break;
-    //
-    //     }
-    //
-    //   } catch (...) {
-    //       std::cout << "Invalid payload: " << *payload << std::endl;
-    //       payload++;
-    //   }
-    // }
+    auto payload = reservedCPMs.begin();
+    while (payload != reservedCPMs.end()) {
+      json payload_json = json::parse(*payload);
+      double timestamp = payload_json["timestamp"].get<double>();
+      double simtime = simTime().dbl();
+      // std::cout << "simTime: " << simtime << " timestamp: " << timestamp << std::endl;
 
-    for (auto payload = reservedCPMs.begin(); payload != reservedCPMs.end(); payload++) {
+      if (timestamp <= simtime - carlaTimeStep) {
+        // std::cout << "The packet is too old, so erase it." << std::endl;
+        reservedCPMs.erase(payload);
+
+      } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
+        // std::cout << "The packet is created now, so send it." << std::endl;
         VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
-        try {
-            json payload_json = json::parse(*payload);
+        populateWSM(cpm);
+        cpm->setPayload((*payload).c_str());
+        cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
+        sendDown(cpm);
 
-            populateWSM(cpm);
-            cpm->setPayload((*payload).c_str());
-            cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
-            sendDown(cpm);
-        } catch (...) {
-            // std::cout << "Invalid payload: " << *payload << std::endl;
-            continue;
-        }
+        reservedCPMs.erase(payload);
+
+      } else {
+        // std::cout << "The packet should be sent in the next timestamp, so break" << std::endl;
+        break;
+
+      }
     }
 }
 
