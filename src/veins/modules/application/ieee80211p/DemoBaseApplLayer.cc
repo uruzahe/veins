@@ -200,9 +200,11 @@ void DemoBaseApplLayer::initialize(int stage)
                 scheduleAt(firstBeacon, sendBeaconEvt);
             }
 
+            // My Code, Begin.
             if (sendCPM) {
               scheduleAt(firstBeacon, sendCPMEvt);
             }
+            // My Code, End.
         }
     }
 }
@@ -313,13 +315,13 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
     else if (DemoServiceAdvertisment* wsa = dynamic_cast<DemoServiceAdvertisment*>(wsm)) {
         receivedWSAs++;
         onWSA(wsa);
-    }
+    } // My Code, Begin
     else if (VeinsCarlaCpm* cpm = dynamic_cast<VeinsCarlaCpm*>(wsm)) {
         std::cout << sumo_id << " received cpm messages" << std::endl;
         std::cout << "payloads: " << cpm->getPayload() << std::endl;
         receivedCPMs++;
         obtainedCPMs.push_back((std::string) cpm->getPayload());
-    }
+    } // My Code, End.
     else {
         receivedWSMs++;
         onWSM(wsm);
@@ -331,6 +333,9 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
 // My Code, Begin
 void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
 {
+    std::vector<std::string> targetCPMs;
+    double next_time_step = carlaTimeStep;
+
     if (is_dynamic_simulation) {
       // save received cpms
       set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
@@ -339,45 +344,44 @@ void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
 
       // send CPMs
       std::vector<std::string> new_payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir, false);
+
       for (auto payload = new_payloads.begin(); payload != new_payloads.end(); payload++) {
-        reservedCPMs.push_back(*payload);
+        targetCPMs.push_back(*payload);
+      }
+
+    } else {
+      auto payload = reservedCPMs.begin();
+
+      while (payload != reservedCPMs.end()) {
+        json payload_json = json::parse(*payload);
+        double timestamp = payload_json["timestamp"].get<double>();
+        double simtime = simTime().dbl();
+        // std::cout << "sumo_id" << sumo_id << "simTime: " << simtime << " timestamp: " << timestamp << std::endl;
+
+        if (timestamp <= simtime - carlaTimeStep) {
+          // std::cout << "The packet is too old, so erase it." << std::endl;
+          reservedCPMs.erase(payload);
+        } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
+          // std::cout << "The packet is created now, so send it." << std::endl;
+          targetCPMs.push_back(*payload);
+          reservedCPMs.erase(payload);
+        } else {
+          // std::cout << "The packet should be sent in the next timestamp, so break" << std::endl;
+          break;
+        }
       }
     }
 
-    auto payload = reservedCPMs.begin();
-    while (payload != reservedCPMs.end()) {
+    for (auto payload = targetCPMs.begin(); payload != targetCPMs.end(); payload++) {
       json payload_json = json::parse(*payload);
-      double timestamp = payload_json["timestamp"].get<double>();
-      double simtime = simTime().dbl();
-      // std::cout << "simTime: " << simtime << " timestamp: " << timestamp << std::endl;
 
-      if (timestamp <= simtime - carlaTimeStep) {
-        // std::cout << "The packet is too old, so erase it." << std::endl;
-        reservedCPMs.erase(payload);
+      VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
+      populateWSM(cpm);
 
-      } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
-        // std::cout << "The packet is created now, so send it." << std::endl;
-        VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
-        populateWSM(cpm);
-        cpm->setPayload((*payload).c_str());
-        cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
-        sendDown(cpm);
-
-        reservedCPMs.erase(payload);
-
-      } else {
-        // std::cout << "The packet should be sent in the next timestamp, so break" << std::endl;
-        break;
-
-      }
+      cpm->setPayload((*payload).c_str());
+      cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
+      sendDown(cpm);
     }
-}
-
-void DemoBaseApplLayer::pthreadSyncCarlaVeinsData(cMessage* msg)
-{
-    // lock((carlaVeinsDataDir + veinsTxtFile).c_str(), (carlaVeinsDataDir + veinsLockFile).c_str());
-    syncCarlaVeinsData(msg);
-    // unlink((carlaVeinsDataDir + veinsLockFile).c_str());
 }
 
 // My Code, End.
@@ -431,8 +435,10 @@ void DemoBaseApplLayer::finish()
     recordScalar("generatedWSAs", generatedWSAs);
     recordScalar("receivedWSAs", receivedWSAs);
 
+    // Begin My Code.
     recordScalar("generatedCPMs", generatedCPMs);
     recordScalar("receivedCPMs", receivedCPMs);
+    // End My Code.
 }
 
 DemoBaseApplLayer::~DemoBaseApplLayer()
@@ -487,11 +493,11 @@ void DemoBaseApplLayer::checkAndTrackPacket(cMessage* msg)
     else if (dynamic_cast<DemoServiceAdvertisment*>(msg)) {
         EV_TRACE << "sending down a WSA" << std::endl;
         generatedWSAs++;
-    }
+    } // Begin My Code.
     else if (dynamic_cast<VeinsCarlaCpm*>(msg)) {
         EV_TRACE << "sending down a cpm" << std::endl;
         generatedCPMs++;
-    }
+    } // End My Code.
     else if (dynamic_cast<BaseFrame1609_4*>(msg)) {
         EV_TRACE << "sending down a wsm" << std::endl;
         generatedWSMs++;

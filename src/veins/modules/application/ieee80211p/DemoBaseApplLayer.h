@@ -155,8 +155,6 @@ protected:
 
     // My Code, Begin
     virtual void syncCarlaVeinsData(cMessage* msg);
-
-    virtual void pthreadSyncCarlaVeinsData(cMessage* msg);
     // My Code, End
 protected:
     /* pointers ill be set when used with TraCIMobility */
