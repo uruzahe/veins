@@ -36,9 +36,33 @@ using namespace veins;
 #include <iostream>
 #include <fstream>
 #include <vector>
+// ----- Begin My Code -----
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+
+int existFile(const char* path)
+{
+    FILE* fp = fopen(path, "r");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    fclose(fp);
+    return 1;
+}
+
+
+int carla_lock_wait(std::string data_sync_dir) {
+  std::string carla_lock_file_path = data_sync_dir + "carla.lock";
+
+  if (existFile(carla_lock_file_path.c_str())) {
+    return carla_lock_wait(data_sync_dir);
+  } else {
+    return 1;
+  }
+}
+
 
 void lock(const char *oldpath, const char *newpath) {
   while (symlink(oldpath, newpath) == -1) {
@@ -51,7 +75,7 @@ void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, 
     std::string packet_data_file_name = sumo_id + "_packet.json";
     std::string packet_lock_file_name = sumo_id + "_packet.json.lock";
 
-    lock((data_sync_dir + packet_data_file_name).c_str(), (data_sync_dir + packet_lock_file_name).c_str());
+//    lock((data_sync_dir + packet_data_file_name).c_str(), (data_sync_dir + packet_lock_file_name).c_str());
     std::ofstream ofs(data_sync_dir + packet_data_file_name, std::ios::in | std::ios::ate);
     if (ofs.is_open()) {
         for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
@@ -59,7 +83,7 @@ void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, 
         }
     }
     ofs.close();
-    unlink((data_sync_dir + packet_lock_file_name).c_str());
+//    unlink((data_sync_dir + packet_lock_file_name).c_str());
 }
 
 
@@ -70,7 +94,7 @@ std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::s
     std::vector<std::string> payloads = {};
     std::string payload;
 
-    lock((data_sync_dir + sensor_data_file_name).c_str(), (data_sync_dir + sensor_lock_file_name).c_str());
+//    lock((data_sync_dir + sensor_data_file_name).c_str(), (data_sync_dir + sensor_lock_file_name).c_str());
     std::ifstream ifs(data_sync_dir + sensor_data_file_name);
     if (ifs.is_open()) {
         while (!ifs.eof()) {
@@ -89,12 +113,12 @@ std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::s
       ofs.close();
     }
 
-    unlink((data_sync_dir + sensor_lock_file_name).c_str());
+//    unlink((data_sync_dir + sensor_lock_file_name).c_str());
     return payloads;
 }
 
 
-// My code, End
+// ----- End My Code -----
 
 void DemoBaseApplLayer::initialize(int stage)
 {
@@ -317,8 +341,8 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
         onWSA(wsa);
     } // My Code, Begin
     else if (VeinsCarlaCpm* cpm = dynamic_cast<VeinsCarlaCpm*>(wsm)) {
-        std::cout << sumo_id << " received cpm messages" << std::endl;
-        std::cout << "payloads: " << cpm->getPayload() << std::endl;
+//        std::cout << sumo_id << " received cpm messages" << std::endl;
+//        std::cout << "payloads: " << cpm->getPayload() << std::endl;
         receivedCPMs++;
         obtainedCPMs.push_back((std::string) cpm->getPayload());
     } // My Code, End.
