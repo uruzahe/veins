@@ -377,21 +377,27 @@ void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
       auto payload = reservedCPMs.begin();
 
       while (payload != reservedCPMs.end()) {
-        json payload_json = json::parse(*payload);
-        double timestamp = payload_json["timestamp"].get<double>();
-        double simtime = simTime().dbl();
-        // std::cout << "sumo_id" << sumo_id << "simTime: " << simtime << " timestamp: " << timestamp << std::endl;
+        try {
+            json payload_json = json::parse(*payload);
 
-        if (timestamp <= simtime - carlaTimeStep) {
-          // std::cout << "The packet is too old, so erase it." << std::endl;
-          reservedCPMs.erase(payload);
-        } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
-          // std::cout << "The packet is created now, so send it." << std::endl;
-          targetCPMs.push_back(*payload);
-          reservedCPMs.erase(payload);
-        } else {
-          // std::cout << "The packet should be sent in the next timestamp, so break" << std::endl;
-          break;
+            double timestamp = payload_json["timestamp"].get<double>();
+            double simtime = simTime().dbl();
+            // std::cout << "sumo_id" << sumo_id << "simTime: " << simtime << " timestamp: " << timestamp << std::endl;
+
+            if (timestamp <= simtime - carlaTimeStep) {
+              // std::cout << "The packet is too old, so erase it." << std::endl;
+              reservedCPMs.erase(payload);
+            } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
+              // std::cout << "The packet is created now, so send it." << std::endl;
+              targetCPMs.push_back(*payload);
+              reservedCPMs.erase(payload);
+            } else {
+              // std::cout << "The packet should be sent in the next timestamp, so break" << std::endl;
+              break;
+            }
+        } catch (...) {
+            std::cout << "reservedCPMd error: "<< *payload << std::endl;
+            continue;
         }
       }
     }
