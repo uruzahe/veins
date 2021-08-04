@@ -396,21 +396,26 @@ void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
               break;
             }
         } catch (...) {
-            std::cout << "reservedCPMd error: "<< *payload << std::endl;
+            std::cout << "reservedCPMd error: "<< (*payload).c_str() << "." << std::endl;
             continue;
         }
       }
     }
 
     for (auto payload = targetCPMs.begin(); payload != targetCPMs.end(); payload++) {
-      json payload_json = json::parse(*payload);
+      try {
+          json payload_json = json::parse(*payload);
 
-      VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
-      populateWSM(cpm);
+          VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
+          populateWSM(cpm);
 
-      cpm->setPayload((*payload).c_str());
-      cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
-      sendDown(cpm);
+          cpm->setPayload((*payload).c_str());
+          cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
+          sendDown(cpm);
+      } catch (...) {
+          std::cout << "targetCPMd error: "<< (*payload).c_str() << "." << std::endl;
+          continue;
+      }
     }
 }
 
