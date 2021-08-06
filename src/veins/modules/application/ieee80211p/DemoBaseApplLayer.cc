@@ -24,8 +24,6 @@
 
 using namespace veins;
 
-// My code, Begin
-// #include <boost/thread.hpp>
 #include <pthread.h>
 #include <time.h>
 #include <chrono>

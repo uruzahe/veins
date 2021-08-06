@@ -66,6 +66,8 @@ public:
         return constraintAreaMin;
     }
 
+    std::string external_id;
+
 protected:
     cModule* visualRepresentation;
     const inet::CanvasProjection* canvasProjection;

@@ -43,10 +43,6 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-
-void lock(const char *oldpath, const char *newpath);
-void set_cpm_payloads_for_carla(std::string sumo_id, std::vector<std::string> payloads);
-std::vector<std::string>  get_cpm_payloads_from_carla(std::string sumo_id);
 // My Code, End.
 
 namespace veins {
