@@ -41,7 +41,8 @@
             <obstacles>
                 <type id="building" db-per-cut="9" db-per-meter="0.4" />
             </obstacles>
-        </AnalogueModel> -->
+        </AnalogueModel>
+        -->
     </AnalogueModels>
     <Decider type="Decider80211p">
         <!-- The center frequency on which the phy listens-->
