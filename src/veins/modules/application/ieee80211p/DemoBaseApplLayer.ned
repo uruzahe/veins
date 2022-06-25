@@ -54,6 +54,13 @@ simple DemoBaseApplLayer like IBaseApplLayer
         int wsaLengthBits = default(250bit) @unit(bit);
         double wsaInterval =  default(1s) @unit(s);
 
+		// ----- Begin My Params -----		
+        bool sendCPM = default(false);
+        double carlaTimeStep = default(0.1s) @unit(s);
+        string carlaVeinsDataDir = default("/vagrant/carla-veins-data/");
+        bool is_dynamic_simulation = default(false);
+		// ----- End My Params -----
+	
     gates:
         input lowerLayerIn; // from mac layer
         output lowerLayerOut; // to mac layer

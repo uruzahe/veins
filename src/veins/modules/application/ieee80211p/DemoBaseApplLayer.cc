@@ -24,6 +24,100 @@
 
 using namespace veins;
 
+#include <pthread.h>
+#include <time.h>
+#include <chrono>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
+// ----- Begin My Code -----
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
+
+int existFile(const char* path)
+{
+    FILE* fp = fopen(path, "r");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    fclose(fp);
+    return 1;
+}
+
+
+int carla_lock_wait(std::string data_sync_dir) {
+  std::string carla_lock_file_path = data_sync_dir + "carla.lock";
+
+  if (existFile(carla_lock_file_path.c_str())) {
+    return carla_lock_wait(data_sync_dir);
+  } else {
+    return 1;
+  }
+}
+
+
+void lock(const char *oldpath, const char *newpath) {
+  while (symlink(oldpath, newpath) == -1) {
+    continue;
+  }
+}
+
+
+void set_cpm_payloads_for_carla(std::string sumo_id, std::string data_sync_dir, std::vector<std::string> payloads) {
+    std::string packet_data_file_name = sumo_id + "_packet.json";
+    std::string packet_lock_file_name = sumo_id + "_packet.json.lock";
+
+//    lock((data_sync_dir + packet_data_file_name).c_str(), (data_sync_dir + packet_lock_file_name).c_str());
+    std::ofstream ofs(data_sync_dir + packet_data_file_name, std::ios::in | std::ios::ate);
+    if (ofs.is_open()) {
+        for (auto payload = payloads.begin(); payload != payloads.end(); payload++) {
+            ofs << *payload << std::endl;
+        }
+    }
+    ofs.close();
+//    unlink((data_sync_dir + packet_lock_file_name).c_str());
+}
+
+
+std::vector<std::string> get_cpm_payloads_from_carla(std::string sumo_id, std::string data_sync_dir, bool read_only) {
+    std::string sensor_data_file_name = sumo_id + "_sensor.json";
+    std::string sensor_lock_file_name = sumo_id + "_sensor.json.lock";
+
+    std::vector<std::string> payloads = {};
+    std::string payload;
+
+//    lock((data_sync_dir + sensor_data_file_name).c_str(), (data_sync_dir + sensor_lock_file_name).c_str());
+    std::ifstream ifs(data_sync_dir + sensor_data_file_name);
+    if (ifs.is_open()) {
+        while (!ifs.eof()) {
+          std::getline(ifs, payload);
+          if (payload != "") {
+            payloads.push_back(payload);
+          } else {
+            continue;
+          }
+        }
+    }
+    ifs.close();
+
+    if (!read_only) {
+      std::ofstream ofs(data_sync_dir + sensor_data_file_name);
+      ofs.close();
+    }
+
+//    unlink((data_sync_dir + sensor_lock_file_name).c_str());
+    return payloads;
+}
+
+
+// ----- End My Code -----
+
 void DemoBaseApplLayer::initialize(int stage)
 {
     BaseApplLayer::initialize(stage);
@@ -76,6 +170,28 @@ void DemoBaseApplLayer::initialize(int stage)
         receivedBSMs = 0;
         receivedWSAs = 0;
         receivedWSMs = 0;
+
+        // My Code, Begin.
+        EV_TRACE << "My Code" << std::endl;
+        carlaVeinsDataDir = par("carlaVeinsDataDir").stringValue();
+        sendCPM = par("sendCPM").boolValue();
+        is_dynamic_simulation = par("is_dynamic_simulation").boolValue();
+        carlaTimeStep = par("carlaTimeStep").doubleValue();
+
+        sendCPMEvt = new cMessage("cpm evt", SEND_CPM_EVT);
+        sumo_id = mobility->getExternalId();
+        obtainedCPMs = {};
+        if (is_dynamic_simulation) {
+          reservedCPMs = {} ;
+        } else {
+          reservedCPMs = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir, true);
+        }
+        veinsLockFile = sumo_id + "_veins.lock";
+        veinsTxtFile = sumo_id + "_veins.txt";
+
+        generatedCPMs = 0;
+        receivedCPMs = 0;
+        // My Code, End.
     }
     else if (stage == 1) {
 
@@ -105,6 +221,12 @@ void DemoBaseApplLayer::initialize(int stage)
             if (sendBeacons) {
                 scheduleAt(firstBeacon, sendBeaconEvt);
             }
+
+            // My Code, Begin.
+            if (sendCPM) {
+              scheduleAt(firstBeacon, sendCPMEvt);
+            }
+            // My Code, End.
         }
     }
 }
@@ -205,7 +327,6 @@ void DemoBaseApplLayer::handleParkingUpdate(cObject* obj)
 
 void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
 {
-
     BaseFrame1609_4* wsm = dynamic_cast<BaseFrame1609_4*>(msg);
     ASSERT(wsm);
 
@@ -216,7 +337,13 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
     else if (DemoServiceAdvertisment* wsa = dynamic_cast<DemoServiceAdvertisment*>(wsm)) {
         receivedWSAs++;
         onWSA(wsa);
-    }
+    } // My Code, Begin
+    else if (VeinsCarlaCpm* cpm = dynamic_cast<VeinsCarlaCpm*>(wsm)) {
+//        std::cout << sumo_id << " received cpm messages" << std::endl;
+//        std::cout << "payloads: " << cpm->getPayload() << std::endl;
+        receivedCPMs++;
+        obtainedCPMs.push_back((std::string) cpm->getPayload());
+    } // My Code, End.
     else {
         receivedWSMs++;
         onWSM(wsm);
@@ -225,6 +352,72 @@ void DemoBaseApplLayer::handleLowerMsg(cMessage* msg)
     delete (msg);
 }
 
+// My Code, Begin
+void DemoBaseApplLayer::syncCarlaVeinsData(cMessage* msg)
+{
+    std::vector<std::string> targetCPMs;
+    double next_time_step = carlaTimeStep;
+
+    if (is_dynamic_simulation) {
+      // save received cpms
+      set_cpm_payloads_for_carla(sumo_id, carlaVeinsDataDir, obtainedCPMs);
+      obtainedCPMs.clear();
+      obtainedCPMs.shrink_to_fit();
+
+      // send CPMs
+      std::vector<std::string> new_payloads = get_cpm_payloads_from_carla(sumo_id, carlaVeinsDataDir, false);
+
+      for (auto payload = new_payloads.begin(); payload != new_payloads.end(); payload++) {
+        targetCPMs.push_back(*payload);
+      }
+
+    } else {
+      auto payload = reservedCPMs.begin();
+
+      while (payload != reservedCPMs.end()) {
+        try {
+            json payload_json = json::parse(*payload);
+
+            double timestamp = payload_json["timestamp"].get<double>();
+            double simtime = simTime().dbl();
+            // std::cout << "sumo_id" << sumo_id << "simTime: " << simtime << " timestamp: " << timestamp << std::endl;
+
+            if (timestamp <= simtime - carlaTimeStep) {
+              // std::cout << "The packet is too old, so erase it." << std::endl;
+              reservedCPMs.erase(payload);
+            } else if (simtime - carlaTimeStep < timestamp && timestamp <= simtime) {
+              // std::cout << "The packet is created now, so send it." << std::endl;
+              targetCPMs.push_back(*payload);
+              reservedCPMs.erase(payload);
+            } else {
+              // std::cout << "The packet should be sent in the next timestamp, so break" << std::endl;
+              break;
+            }
+        } catch (...) {
+            std::cout << "reservedCPMd error: "<< (*payload).c_str() << "." << std::endl;
+            continue;
+        }
+      }
+    }
+
+    for (auto payload = targetCPMs.begin(); payload != targetCPMs.end(); payload++) {
+      try {
+          json payload_json = json::parse(*payload);
+
+          VeinsCarlaCpm* cpm = new VeinsCarlaCpm();
+          populateWSM(cpm);
+
+          cpm->setPayload((*payload).c_str());
+          cpm->setBitLength(payload_json["option"]["size"].get<int>() * 8);
+          sendDown(cpm);
+      } catch (...) {
+          std::cout << "targetCPMd error: "<< (*payload).c_str() << "." << std::endl;
+          continue;
+      }
+    }
+}
+
+// My Code, End.
 void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
 {
     switch (msg->getKind()) {
@@ -241,6 +434,21 @@ void DemoBaseApplLayer::handleSelfMsg(cMessage* msg)
         sendDown(wsa);
         scheduleAt(simTime() + wsaInterval, sendWSAEvt);
         break;
+    }
+    case SEND_CPM_EVT: {
+        // My Code, Begin
+        // std::chrono::system_clock::time_point  start, end; // 型は auto で可
+        // start = std::chrono::system_clock::now(); // 計測開始時間
+
+        syncCarlaVeinsData(msg);
+
+        // end = std::chrono::system_clock::now();  // 計測終了時間
+        // double elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+        // std::cout << "diff_time: " << elapsed * (1.0 / (1000 * 1000 * 1000)) << std::endl;
+
+        scheduleAt(simTime() + carlaTimeStep, sendCPMEvt);
+        break;
+        // My Code, Begin
     }
     default: {
         if (msg) EV_WARN << "APP: Error: Got Self Message of unknown kind! Name: " << msg->getName() << endl;
@@ -259,10 +467,18 @@ void DemoBaseApplLayer::finish()
 
     recordScalar("generatedWSAs", generatedWSAs);
     recordScalar("receivedWSAs", receivedWSAs);
+
+    // Begin My Code.
+    recordScalar("generatedCPMs", generatedCPMs);
+    recordScalar("receivedCPMs", receivedCPMs);
+    // End My Code.
 }
 
 DemoBaseApplLayer::~DemoBaseApplLayer()
 {
+    // My Code, Begin.
+    cancelAndDelete(sendCPMEvt);
+    // My Code, End.
     cancelAndDelete(sendBeaconEvt);
     cancelAndDelete(sendWSAEvt);
     findHost()->unsubscribe(BaseMobility::mobilityStateChangedSignal, this);
@@ -310,7 +526,11 @@ void DemoBaseApplLayer::checkAndTrackPacket(cMessage* msg)
     else if (dynamic_cast<DemoServiceAdvertisment*>(msg)) {
         EV_TRACE << "sending down a WSA" << std::endl;
         generatedWSAs++;
-    }
+    } // Begin My Code.
+    else if (dynamic_cast<VeinsCarlaCpm*>(msg)) {
+        EV_TRACE << "sending down a cpm" << std::endl;
+        generatedCPMs++;
+    } // End My Code.
     else if (dynamic_cast<BaseFrame1609_4*>(msg)) {
         EV_TRACE << "sending down a wsm" << std::endl;
         generatedWSMs++;

@@ -28,8 +28,8 @@ For each incoming TCP connection the daemon receives a launch configuration.
 It starts SUMO accordingly, then proxies all TraCI Messages.
 
 The launch configuration must be sent in the very first TraCI message.
-This message must contain a single command, CMD_FILE_SEND and be used to
-send a file named "sumo-launchd.launch.xml", which has the following
+This message must contain a single command, CMD_FILE_SEND and be used to 
+send a file named "sumo-launchd.launch.xml", which has the following 
 structure:
 
 <?xml version="1.0"?>
@@ -144,9 +144,9 @@ def parse_launch_configuration(launch_xml_string):
     """
     Returns tuple of options set in launch configuration
     """
-
+    
     p = xml.dom.minidom.parseString(launch_xml_string)
-
+    
     # get root node "launch"
     launch_node = p.documentElement
     if (launch_node.tagName != "launch"):
@@ -172,7 +172,7 @@ def parse_launch_configuration(launch_xml_string):
 
     # get list of "launch.copy" entries
     copy_nodes = [x for x in launch_node.getElementsByTagName("copy") if x.parentNode==launch_node]
-
+    
     return (basedir, copy_nodes, seed)
 
 
@@ -196,7 +196,7 @@ def run_sumo(runpath, sumo_command, shlex, config_file_name, remote_port, seed, 
             import shlex
             cmd = shlex.split(sumo_command.replace('{}', '-c ' + unicode(config_file_name).encode()))
         else:
-            cmd = [sumo_command, "-c", config_file_name]
+            cmd = [sumo_command, "-c", config_file_name] 
         logging.info("Starting SUMO (%s) on port %d, seed %d" % (" ".join(cmd), remote_port, seed))
         sumo = subprocess.Popen(cmd, cwd=runpath, stdin=None, stdout=sumoLogOut, stderr=sumoLogErr)
 
@@ -208,12 +208,7 @@ def run_sumo(runpath, sumo_command, shlex, config_file_name, remote_port, seed, 
             try:
                 logging.debug("Connecting to SUMO (%s) on port %d (try %d)" % (" ".join(cmd), remote_port, tries))
                 sumo_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                # sumo_socket.connect(('127.0.0.1', remote_port))
-                sumo_socket.connect(('192.168.20.141', 10002))
-                handle_set_order(sumo_socket, 1)
-                # for i in range(0, 20):
-                #     print("time: {:}".format(i))
-                #     time.sleep(1)
+                sumo_socket.connect(('127.0.0.1', remote_port))
                 break
             except socket.error, e:
                 logging.debug("Error (%s)" % e)
@@ -268,7 +263,7 @@ def run_sumo(runpath, sumo_command, shlex, config_file_name, remote_port, seed, 
 
     except:
         raise
-
+    
     # statistics
     sumo_end = int(time.time())
 
@@ -326,7 +321,7 @@ def copy_and_modify_files(basedir, copy_nodes, runpath, remote_port, seed):
     """
     Copy (and modify) files, return config file name
     """
-
+    
     config_file_name = None
     for copy_node in copy_nodes:
 
@@ -402,20 +397,19 @@ def handle_launch_configuration(sumo_command, shlex, launch_xml_string, client_s
 
     result_xml = None
     unused_port_lock = UnusedPortLock()
-    try:
-        # parse launch configuration
+    try:    
+        # parse launch configuration 
         (basedir, copy_nodes, seed) = parse_launch_configuration(launch_xml_string)
 
         # find remote_port
         logging.debug("Finding free port number...")
         unused_port_lock.__enter__()
         remote_port = find_unused_port()
-        # remote_port = 10000
         logging.debug("...found port %d" % remote_port)
 
         # copy (and modify) files
         config_file_name = copy_and_modify_files(basedir, copy_nodes, runpath, remote_port, seed)
-
+        
         # run SUMO
         result_xml = run_sumo(runpath, sumo_command, shlex, config_file_name, remote_port, seed, client_socket, unused_port_lock, keep_temp)
 
@@ -444,53 +438,6 @@ def handle_get_version(conn):
     response = struct.pack("!iBBBiBBii", 4+1+1+1+4 + 1+1+4+4+len(_LAUNCHD_VERSION), 1+1+1+4, _CMD_GET_VERSION, 0x00, 0x00, 1+1+4+4+len(_LAUNCHD_VERSION), _CMD_GET_VERSION, _API_VERSION, len(_LAUNCHD_VERSION)) + _LAUNCHD_VERSION
     conn.send(response)
 
-def handle_set_order(conn, order=2):
-    """
-    process a "set order" command received on the connection
-    """
-    # _sendCmd method in connection.py
-    cmdID = 0x03
-    varID = None
-    objID = None
-    format = "I"
-    values = order
-
-    ### _pack method in connection.py
-    def tmp_pack(format, *values):
-        packed = bytes()
-        for f, v in zip(format, values):
-           packed += struct.pack("!i", int(v))
-        return packed
-    packed = tmp_pack(format, values)
-
-    length = len(packed) + 1 + 1  # length and command
-    if varID is not None:
-        if isinstance(varID, tuple):  # begin and end of a subscription
-            length += 8 + 8 + 4 + len(objID)
-        else:
-            length += 1 + 4 + len(objID)
-
-    body_string = bytes()
-    if length <= 255:
-        body_string += struct.pack("!BB", length, cmdID)
-    else:
-        body_string += struct.pack("!BiB", 0, length + 4, cmdID)
-
-    if varID is not None:
-        if isinstance(varID, tuple):
-            body_string += struct.pack("!dd", *varID)
-        else:
-            body_string += struct.pack("!B", varID)
-        body_string += struct.pack("!i", len(objID)) + objID.encode("latin1")
-    body_string += packed
-
-    # _sendExact method in connection.py
-    def tmp_sendExact(conn, body_string):
-        length = struct.pack("!i", len(body_string) + 4)
-        conn.send(length + body_string)
-    tmp_sendExact(conn, body_string)
-
-    data = conn.recv(65535)
 
 def read_launch_config(conn):
     """
@@ -555,10 +502,10 @@ def read_launch_config(conn):
     # Send OK response
     response = struct.pack("!iBBBi", 4+1+1+1+4, 1+1+1+4, _CMD_FILE_SEND, 0x00, 0x00)
     conn.send(response)
-
+    
     return data
-
-
+        
+        
 def handle_connection(sumo_command, shlex, conn, addr, keep_temp):
     """
     Handle incoming connection.
@@ -572,7 +519,7 @@ def handle_connection(sumo_command, shlex, conn, addr, keep_temp):
 
     except Exception, e:
         logging.error("Aborting on error: %s" % e)
-
+    
     finally:
         logging.debug("Closing connection from %s on port %d" % addr)
         conn.close()
@@ -582,10 +529,10 @@ def wait_for_connections(sumo_command, shlex, sumo_port, bind_address, do_daemon
     """
     Open TCP socket, wait for connections, call handle_connection for each
     """
-
+   
     if do_kill:
-        check_kill_daemon(pidfile)
-
+        check_kill_daemon(pidfile)   
+    
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind((bind_address, sumo_port))
@@ -601,16 +548,16 @@ def wait_for_connections(sumo_command, shlex, sumo_port, bind_address, do_daemon
             conn, addr = listener.accept()
             logging.debug("Connection from %s on port %d" % addr)
             thread.start_new_thread(handle_connection, (sumo_command, shlex, conn, addr, keep_temp))
-
+    
     except exceptions.SystemExit:
         logging.warning("Killed.")
-
+    
     except exceptions.KeyboardInterrupt:
         logging.warning("Keyboard interrupt.")
-
+    
     except:
         raise
-
+    
     finally:
         # clean up
         logging.info("Shutting down.")
@@ -689,7 +636,6 @@ def main():
 
     # Option handling
     parser = OptionParser()
-    # parser.add_option("-c", "--command", dest="command", default="sumo", help="run SUMO as COMMAND [default: %default]", metavar="COMMAND")
     parser.add_option("-c", "--command", dest="command", default="sumo", help="run SUMO as COMMAND [default: %default]", metavar="COMMAND")
     parser.add_option("-s", "--shlex", dest="shlex", default=False, action="store_true", help="treat command as shell string to execute, replace {} with command line parameters [default: no]")
     parser.add_option("-p", "--port", dest="port", type="int", default=9999, action="store", help="listen for connections on PORT [default: %default]", metavar="PORT")
@@ -707,7 +653,7 @@ def main():
 
     # catch SIGTERM to exit cleanly when we're kill-ed
     signal.signal(signal.SIGTERM, lambda signum, stack_frame: sys.exit(1))
-
+    
     # configure logging
     logging.basicConfig(filename=options.logfile, level=loglevel)
     if not options.daemonize:
@@ -724,4 +670,3 @@ def main():
 # Start main() when run interactively
 if __name__ == '__main__':
     main()
-#!/usr/bin/env python2
